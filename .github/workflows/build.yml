@@ -1,0 +1,128 @@
+name: Build and release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_VERSION: '1.93.1'
+
+jobs:
+  build:
+    name: Linux ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+    env:
+      TARGET: ${{ matrix.target }}
+      ARCH: ${{ matrix.arch }}
+      CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
+      CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes musl-tools
+          rustup toolchain install "$RUST_VERSION" --profile minimal --target "$TARGET"
+      - name: Verify release version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          python3 - <<'PY'
+          import os, tomllib
+          with open('Cargo.toml', 'rb') as f:
+              version = tomllib.load(f)['package']['version']
+          assert os.environ['GITHUB_REF_NAME'] == 'v' + version, 'Tag must match Cargo.toml version'
+          PY
+      - name: Test and build native static executable
+        run: |
+          cargo +"$RUST_VERSION" test --locked --target "$TARGET"
+          cargo +"$RUST_VERSION" build --release --locked --target "$TARGET"
+          install -Dm755 "target/$TARGET/release/niri-layout" target/release/niri-layout
+          python3 tests/daemon_smoke.py
+          target/release/niri-layout --config examples/config.kdl check
+          python3 - <<'PY'
+          import subprocess
+          headers = subprocess.check_output(['readelf', '-l', 'target/release/niri-layout'], text=True)
+          assert 'INTERP' not in headers, 'Release executable must not require a dynamic loader'
+          PY
+      - name: Package and test installation
+        run: |
+          scripts/package-release "$ARCH" target/release/niri-layout
+          temp_dir=$(mktemp -d)
+          tar -xzf dist/*.tar.gz -C "$temp_dir"
+          bundle=$(find "$temp_dir" -mindepth 1 -maxdepth 1 -type d)
+          PREFIX="$temp_dir/prefix" "$bundle/install.sh"
+          "$temp_dir/prefix/bin/niri-layout" --version
+          "$temp_dir/prefix/bin/niri-layout" --config "$temp_dir/prefix/share/niri-layout/examples/config.kdl" check
+          test -x "$temp_dir/prefix/bin/niri-layout-session"
+          test ! -e "$temp_dir/prefix/config.kdl"
+          cd dist
+          sha256sum --check ./*.sha256
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: linux-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish tagged release
+    if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: linux-*
+          path: dist
+          merge-multiple: true
+      - name: Publish verified archives
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          test "$(find . -maxdepth 1 -name '*.tar.gz' | wc -l)" -eq 2
+          sha256sum --check ./*.sha256
+          if state=$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft 2>/dev/null); then
+            if [ "$state" != true ]; then
+              echo "Release already published; assets will not be replaced."
+              exit 0
+            fi
+          else
+            flags=()
+            if [[ "$RELEASE_TAG" == *-* ]]; then flags+=(--prerelease); fi
+            gh release create "$RELEASE_TAG" --verify-tag --draft \
+              --title "$RELEASE_TAG" --generate-notes "${flags[@]}"
+          fi
+          gh release upload "$RELEASE_TAG" ./*.tar.gz ./*.sha256 --clobber
+          gh release edit "$RELEASE_TAG" --draft=false

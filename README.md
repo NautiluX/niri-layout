@@ -22,7 +22,15 @@ sequential, not atomic, and width/order changes can briefly change focus.
 - [Examples](examples/README.md): laptop, docked, presentation and external-only scenarios.
 - [Project research](docs/research.md): related tools considered during development.
 
-## Build
+## Install
+
+Download a prebuilt Linux x86-64 or ARM64 archive from
+[GitHub Releases](https://github.com/NautiluX/niri-layout/releases/latest).
+Extract it and run `./install.sh` to install under `~/.local` without Rust.
+See [release installation](docs/releases.md) for checksum verification, upgrades
+and CI publishing instructions. Install niri and Kanshi separately.
+
+## Build from source
 
 Rust 1.93.1 is the tested compiler. Install Rust/Cargo and Kanshi through your normal
 package manager, then:

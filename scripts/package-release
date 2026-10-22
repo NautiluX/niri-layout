@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Build a release archive from an already built and tested executable.
+set -euo pipefail
+if [[ $# != 2 || ! "$1" =~ ^(x86_64|aarch64)$ ]]; then
+    echo "Usage: scripts/package-release {x86_64|aarch64} PATH_TO_BINARY" >&2
+    exit 2
+fi
+arch=$1
+binary=$(realpath "$2")
+repo_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+cd "$repo_dir"
+version=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')
+[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+][A-Za-z0-9.+-]+)?$ ]] || exit 2
+[[ "$("$binary" --version)" == "niri-layout $version" ]] || { echo 'Binary version mismatch' >&2; exit 1; }
+name="niri-layout-v$version-linux-$arch"
+staging=$(mktemp -d)
+trap 'rm -rf "$staging"' EXIT
+mkdir -p "$staging/$name" dist
+install -m755 "$binary" "$staging/$name/niri-layout"
+install -m755 scripts/start-session "$staging/$name/niri-layout-session"
+install -m755 scripts/install-release "$staging/$name/install.sh"
+install -m644 README.md "$staging/$name/README.md"
+# Explicit allowlist: never archive the checkout, local configs, logs or backups.
+# Only public, tracked documentation/examples belong in the archive.
+while IFS= read -r -d '' path; do
+    mkdir -p "$staging/$name/$(dirname "$path")"
+    install -m644 "$path" "$staging/$name/$path"
+done < <(git ls-files -z -- docs examples)
+tar -czf "dist/$name.tar.gz" -C "$staging" "$name"
+(cd dist && sha256sum "$name.tar.gz" > "$name.tar.gz.sha256")
+printf 'Created dist/%s.tar.gz\n' "$name"

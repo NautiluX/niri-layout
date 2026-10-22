@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Run from an extracted release. Does not write or activate desktop configuration.
+set -euo pipefail
+bundle_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+prefix=${PREFIX:-"$HOME/.local"}
+case "$prefix" in /*) ;; *) echo 'PREFIX must be an absolute path' >&2; exit 2 ;; esac
+for name in niri-layout niri-layout-session; do
+    [[ -x "$bundle_dir/$name" ]] || { echo "Missing release executable: $name" >&2; exit 1; }
+done
+install -Dm755 "$bundle_dir/niri-layout" "$prefix/bin/niri-layout"
+install -Dm755 "$bundle_dir/niri-layout-session" "$prefix/bin/niri-layout-session"
+mkdir -p "$prefix/share/niri-layout"
+install -m644 "$bundle_dir/README.md" "$prefix/share/niri-layout/README.md"
+cp -R "$bundle_dir/docs" "$bundle_dir/examples" "$prefix/share/niri-layout/"
+printf 'Installed to %s/bin\nExamples and docs: %s/share/niri-layout\n' "$prefix" "$prefix"
+printf 'Add %s/bin to your session PATH. Configuration and startup were not changed.\n' "$prefix"

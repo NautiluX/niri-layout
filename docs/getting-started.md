@@ -18,9 +18,12 @@ Do not infer browser account/profile identity from a generic browser app ID.
 The companion targets niri 26.04. The wildcard integration example uses Kanshi 1.9.
 A newer installed version is not proof of compatibility; validate against your session.
 
-## 2. Build and install the executable
+## 2. Install the executable
 
-From the checkout:
+Use a [prebuilt release](releases.md) to install without a Rust compiler.
+The archive includes the executable, session wrapper, docs and examples.
+
+Alternatively, build from a source checkout:
 
 ```sh
 cargo build --release --locked
