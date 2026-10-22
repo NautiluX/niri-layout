@@ -1,0 +1,15 @@
+[package]
+name = "niri-layout"
+version = "0.1.0"
+edition = "2024"
+description = "Declarative workspace and window profiles for niri and Kanshi"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+kdl = "6"
+niri-ipc = "=26.4.0"
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+fs2 = "0.4"

@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Start the companion before Kanshi can invoke its first profile hook.
+set -euo pipefail
+export PATH="$HOME/.local/bin:/usr/bin:/bin:$PATH"
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/niri-layout"
+mkdir -p "$state_dir"
+exec >>"$state_dir/session.log" 2>&1
+printf '\nStarting niri-layout session at %s\n' "$(date --iso-8601=seconds)"
+niri-layout daemon &
+layout_pid=$!
+kanshi_pid=
+cleanup() {
+    kill "$layout_pid" ${kanshi_pid:+"$kanshi_pid"} 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+for attempt in {1..100}; do
+    kill -0 "$layout_pid" 2>/dev/null || { echo 'niri-layout exited during startup' >&2; exit 1; }
+    if niri-layout status >/dev/null 2>&1; then
+        kanshi &
+        kanshi_pid=$!
+        wait -n "$layout_pid" "$kanshi_pid"
+        exit $?
+    fi
+    sleep 0.05
+done
+echo 'niri-layout did not become ready' >&2
+exit 1

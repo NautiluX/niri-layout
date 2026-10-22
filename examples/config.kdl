@@ -1,0 +1,40 @@
+// Fictional apps: replace with observed app IDs. KDL v2.
+gaps 2
+horizontal-inset 0
+app "notes" app-id="^org[.]example[.]Notes$"
+app "browser" app-id="^org[.]example[.]Browser$"
+app "terminal" app-id="^org[.]example[.]Terminal$"
+
+profile "portable" enforce-order=#true {
+    workspace "notes" output="laptop" order=1 {
+        columns "notes" width="100%"
+    }
+    workspace "web" output="laptop" order=2 {
+        columns "browser" width="100%"
+    }
+    workspace "shell" output="laptop" order=3 {
+        columns "terminal" width="100%"
+    }
+    workspace "presentation" output="laptop" order=4
+}
+profile "docked" extends="portable" enforce-order=#false {
+    workspace "web" output="external" order=1 {
+        columns "browser" width="50%"
+    }
+    workspace "shell" output="external" order=2 {
+        columns "terminal" width="100%"
+    }
+    // Avoid leaving an unrealizable gap after moving web and shell away.
+    workspace "presentation" output="laptop" order=2
+}
+profile "presenting" extends="portable" enforce-order=#false {
+    workspace "web" output="laptop" order=2 {
+        columns "browser" width="100%" skip=1
+    }
+    workspace "presentation" output="external" order=1 {
+        // First by window ID, not by browser profile/account.
+        column "browser" width="100%"
+    }
+}
+// Map the role 'laptop' to the external connector when no laptop is active.
+profile "external-only" extends="portable" enforce-order=#false

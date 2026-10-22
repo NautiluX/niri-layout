@@ -1,0 +1,10 @@
+/target/
+__pycache__/
+
+# Real machine configuration belongs outside the public source tree.
+/local/
+/deploy/
+/docs/deployment.md
+*.local.kdl
+*.local.conf
+*.log

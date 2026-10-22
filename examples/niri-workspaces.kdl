@@ -1,0 +1,7 @@
+// Merge into niri's config. This is not a full desktop configuration.
+workspace "notes"
+workspace "web"
+workspace "shell"
+workspace "presentation"
+// Enable after reviewing the configuration and installing the wrapper:
+// spawn-at-startup "niri-layout-session"
